@@ -2,6 +2,10 @@
 #include "search.hpp"
 #include "hardware.hpp"
 #include "benchmark.hpp"
+#include "resource_policy.hpp"
+#include "chunk_manager.hpp"
+#include "metadata.hpp"
+#include "strategy.hpp"
 #include <iostream>
 #include <iomanip>
 
@@ -16,6 +20,25 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     // Generate dataset
     std::cout << "Generating dataset...\n";
     auto dataset = sage::generate_dataset(dataset_size, placement);
+    
+    // SAGE v2 Diagnostic
+    sage::ResourceMode mode = sage::ResourceMode::BALANCED;
+    std::size_t v2_workers = sage::recommended_worker_count(dataset_size, mode);
+    auto chunks = sage::create_chunks(dataset_size, v2_workers);
+    bool chunks_valid = sage::validate_chunks(chunks, dataset_size);
+    auto metadata = sage::generate_metadata(dataset.data, chunks);
+    auto metadata_summary = sage::summarize_metadata(metadata);
+    auto strategy = sage::choose_strategy(dataset_size, true, mode);
+    
+    std::cout << "SAGE v2 Diagnostic:\n";
+    std::cout << "  Resource mode: " << sage::to_string(mode) << "\n";
+    std::cout << "  V2 recommended workers: " << v2_workers << "\n";
+    std::cout << "  Chunks created: " << chunks.size() << "\n";
+    std::cout << "  Chunks valid: " << (chunks_valid ? "YES" : "NO") << "\n";
+    std::cout << "  Metadata blocks: " << metadata_summary.total_blocks << "\n";
+    std::cout << "  Metadata total elements: " << metadata_summary.total_elements << "\n";
+    std::cout << "  Selected strategy: " << sage::to_string(strategy.strategy) << "\n";
+    std::cout << "  Strategy reason: " << strategy.reason << "\n\n";
     
     // Hardware detection
     const std::size_t logical_cores = sage::logical_core_count();

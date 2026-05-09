@@ -15,6 +15,10 @@ set(SOURCES
     engine/src/search.cpp
     engine/src/hardware.cpp
     engine/src/benchmark.cpp
+    engine/src/resource_policy.cpp
+    engine/src/chunk_manager.cpp
+    engine/src/metadata.cpp
+    engine/src/strategy.cpp
 )
 
 add_executable(sage ${SOURCES})
