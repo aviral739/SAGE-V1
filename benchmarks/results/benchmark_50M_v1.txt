@@ -1,0 +1,93 @@
+SAGE v1 - Hardware-Aware Parallel Search Framework
+===================================================
+
+===================================================
+SAGE v1 Benchmark Case: MIDDLE
+===================================================
+Generating dataset...
+Dataset size: 50000000 elements
+Target value: 9999999937
+Target placement: MIDDLE
+Expected index: 25000000
+Logical cores: 12
+Recommended workers: 8
+
+Benchmark Results:
+-----------------
+Linear Search:
+  Result index: 25000000
+  Time: 158.608 ms
+  Correct: YES
+
+std::find:
+  Result index: 25000000
+  Time: 127.713 ms
+  Correct: YES
+
+Parallel Search:
+  Result index: 25000000
+  Time: 2.200 ms
+  Correct: YES
+
+Parallel search speedup: 72.09x
+
+===================================================
+SAGE v1 Benchmark Case: BEGINNING
+===================================================
+Generating dataset...
+Dataset size: 50000000 elements
+Target value: 9999999937
+Target placement: BEGINNING
+Expected index: 0
+Logical cores: 12
+Recommended workers: 8
+
+Benchmark Results:
+-----------------
+Linear Search:
+  Result index: 0
+  Time: 0.001 ms
+  Correct: YES
+
+std::find:
+  Result index: 0
+  Time: 0.000 ms
+  Correct: YES
+
+Parallel Search:
+  Result index: 0
+  Time: 1.321 ms
+  Correct: YES
+
+Parallel search speedup: 0.00x
+
+===================================================
+SAGE v1 Benchmark Case: ABSENT
+===================================================
+Generating dataset...
+Dataset size: 50000000 elements
+Target value: 9999999937
+Target placement: ABSENT
+Expected index: none (target absent)
+Logical cores: 12
+Recommended workers: 8
+
+Benchmark Results:
+-----------------
+Linear Search:
+  Result index: not found
+  Time: 313.624 ms
+  Correct: YES
+
+std::find:
+  Result index: not found
+  Time: 252.442 ms
+  Correct: YES
+
+Parallel Search:
+  Result index: not found
+  Time: 104.087 ms
+  Correct: YES
+
+Parallel search speedup: 3.01x
+
