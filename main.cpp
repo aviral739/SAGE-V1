@@ -8,6 +8,7 @@
 #include "strategy.hpp"
 #include <iostream>
 #include <iomanip>
+#include <chrono>
 
 void run_benchmark_case(const std::string& case_name, sage::TargetPlacement placement) {
     std::cout << "===================================================\n";
@@ -105,6 +106,20 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
         }
     );
     
+    // Metadata-pruned parallel search
+    auto start_time = std::chrono::high_resolution_clock::now();
+    auto metadata_result = sage::metadata_pruned_parallel_search(
+        dataset.data,
+        dataset.target,
+        metadata,
+        v2_workers
+    );
+    auto end_time = std::chrono::high_resolution_clock::now();
+    double metadata_elapsed_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+    bool metadata_correct = (metadata_result.result_index == dataset.expected_index);
+    double metadata_skip_percentage = (metadata_result.total_blocks > 0) ? 
+        (static_cast<double>(metadata_result.blocks_skipped) / metadata_result.total_blocks * 100.0) : 0.0;
+    
     // Display results
     std::cout << std::fixed << std::setprecision(3);
     
@@ -141,9 +156,28 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     std::cout << "  Time: " << parallel_result.elapsed_ms << " ms\n";
     std::cout << "  Correct: " << (parallel_result.correct ? "YES" : "NO") << "\n\n";
     
-    // Speedup calculation
-    double speedup = linear_result.elapsed_ms / parallel_result.elapsed_ms;
-    std::cout << "Parallel search speedup: " << std::setprecision(2) << speedup << "x\n\n";
+    // Metadata-Pruned Parallel Search
+    std::cout << "Metadata-Pruned Parallel Search:\n";
+    std::cout << "  Result index: ";
+    if (metadata_result.result_index) {
+        std::cout << *metadata_result.result_index;
+    } else {
+        std::cout << "not found";
+    }
+    std::cout << "\n";
+    std::cout << "  Time: " << metadata_elapsed_ms << " ms\n";
+    std::cout << "  Correct: " << (metadata_correct ? "YES" : "NO") << "\n";
+    std::cout << "  Total blocks: " << metadata_result.total_blocks << "\n";
+    std::cout << "  Blocks searched: " << metadata_result.blocks_searched << "\n";
+    std::cout << "  Blocks skipped: " << metadata_result.blocks_skipped << "\n";
+    std::cout << "  Skip percentage: " << std::setprecision(1) << metadata_skip_percentage << "%\n\n";
+    
+    // Speedup calculations
+    std::cout << std::setprecision(2);
+    double parallel_speedup = linear_result.elapsed_ms / parallel_result.elapsed_ms;
+    double metadata_speedup = linear_result.elapsed_ms / metadata_elapsed_ms;
+    std::cout << "Parallel search speedup: " << parallel_speedup << "x\n";
+    std::cout << "Metadata-pruned search speedup: " << metadata_speedup << "x\n\n";
 }
 
 int main() {
