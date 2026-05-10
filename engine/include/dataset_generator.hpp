@@ -11,7 +11,8 @@ enum class TargetPlacement {
     MIDDLE,
     END,
     RANDOM,
-    ABSENT
+    ABSENT,
+    ABSENT_IN_RANGE
 };
 
 struct GeneratedDataset {

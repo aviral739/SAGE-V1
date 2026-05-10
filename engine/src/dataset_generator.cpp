@@ -7,7 +7,7 @@ namespace sage {
 GeneratedDataset generate_dataset(std::size_t size, TargetPlacement placement) {
     GeneratedDataset result;
     result.placement = placement;
-    result.target = 9'999'999'937; // Fixed target value
+    result.target = 9'999'999'937; // Fixed target value for most cases
     
     // Handle empty dataset
     if (size == 0) {
@@ -43,6 +43,22 @@ GeneratedDataset generate_dataset(std::size_t size, TargetPlacement placement) {
             break;
         }
         case TargetPlacement::ABSENT:
+            result.expected_index = std::nullopt;
+            // Shuffle to ensure unsorted nature
+            std::shuffle(result.data.begin(), result.data.end(), rng);
+            return result;
+        case TargetPlacement::ABSENT_IN_RANGE:
+            // Use target value 500000 that's within normal range
+            result.target = 500000;
+            // Ensure random generation never accidentally generates 500000
+            std::uniform_int_distribution<std::int64_t> absent_dist(1, 9'999'999'936);
+            for (std::size_t i = 0; i < size; ++i) {
+                std::int64_t value;
+                do {
+                    value = absent_dist(rng);
+                } while (value == 500000); // Ensure we never generate the target
+                result.data[i] = value;
+            }
             result.expected_index = std::nullopt;
             // Shuffle to ensure unsorted nature
             std::shuffle(result.data.begin(), result.data.end(), rng);

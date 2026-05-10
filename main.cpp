@@ -55,6 +55,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
         case sage::TargetPlacement::END: std::cout << "END"; break;
         case sage::TargetPlacement::RANDOM: std::cout << "RANDOM"; break;
         case sage::TargetPlacement::ABSENT: std::cout << "ABSENT"; break;
+        case sage::TargetPlacement::ABSENT_IN_RANGE: std::cout << "ABSENT_IN_RANGE"; break;
     }
     std::cout << "\n";
     
@@ -188,6 +189,7 @@ int main() {
     run_benchmark_case("MIDDLE", sage::TargetPlacement::MIDDLE);
     run_benchmark_case("BEGINNING", sage::TargetPlacement::BEGINNING);
     run_benchmark_case("ABSENT", sage::TargetPlacement::ABSENT);
+    run_benchmark_case("ABSENT_IN_RANGE", sage::TargetPlacement::ABSENT_IN_RANGE);
     
     return 0;
 }
