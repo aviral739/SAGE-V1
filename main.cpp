@@ -6,9 +6,11 @@
 #include "chunk_manager.hpp"
 #include "metadata.hpp"
 #include "strategy.hpp"
+#include "csv_export.hpp"
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <filesystem>
 
 void run_benchmark_case(const std::string& case_name, sage::TargetPlacement placement) {
     std::cout << "===================================================\n";
@@ -179,11 +181,46 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     double metadata_speedup = linear_result.elapsed_ms / metadata_elapsed_ms;
     std::cout << "Parallel search speedup: " << parallel_speedup << "x\n";
     std::cout << "Metadata-pruned search speedup: " << metadata_speedup << "x\n\n";
+    
+    // Export to CSV
+    sage::BenchmarkCsvRow csv_row;
+    csv_row.version = "v2";
+    csv_row.placement = case_name;
+    csv_row.dataset_size = dataset_size;
+    csv_row.target_value = dataset.target;
+    csv_row.resource_mode = sage::to_string(mode);
+    csv_row.selected_strategy = sage::to_string(strategy.strategy);
+    csv_row.logical_cores = logical_cores;
+    csv_row.workers = v2_workers;
+    csv_row.total_blocks = metadata_result.total_blocks;
+    csv_row.blocks_searched = metadata_result.blocks_searched;
+    csv_row.blocks_skipped = metadata_result.blocks_skipped;
+    csv_row.skip_percentage = metadata_skip_percentage;
+    csv_row.linear_ms = linear_result.elapsed_ms;
+    csv_row.std_find_ms = std_find_result.elapsed_ms;
+    csv_row.parallel_ms = parallel_result.elapsed_ms;
+    csv_row.metadata_pruned_ms = metadata_elapsed_ms;
+    csv_row.parallel_speedup = parallel_speedup;
+    csv_row.metadata_pruned_speedup = metadata_speedup;
+    csv_row.linear_correct = linear_result.correct;
+    csv_row.std_find_correct = std_find_result.correct;
+    csv_row.parallel_correct = parallel_result.correct;
+    csv_row.metadata_pruned_correct = metadata_correct;
+    
+    const std::string csv_path = "benchmarks/results/v2_results.csv";
+    sage::write_csv_header_if_needed(csv_path);
+    sage::append_benchmark_row(csv_path, csv_row);
+    
+    std::cout << "CSV row exported: " << csv_path << "\n\n";
 }
 
 int main() {
     std::cout << "SAGE v1 - Hardware-Aware Parallel Search Framework\n";
     std::cout << "===================================================\n\n";
+    
+    // Delete old CSV file to ensure fresh start
+    const std::string csv_path = "benchmarks/results/v2_results.csv";
+    std::filesystem::remove(csv_path);
     
     // Run benchmark cases
     run_benchmark_case("MIDDLE", sage::TargetPlacement::MIDDLE);

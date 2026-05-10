@@ -19,6 +19,7 @@ set(SOURCES
     engine/src/chunk_manager.cpp
     engine/src/metadata.cpp
     engine/src/strategy.cpp
+    engine/src/csv_export.cpp
 )
 
 add_executable(sage ${SOURCES})
