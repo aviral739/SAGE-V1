@@ -14,7 +14,7 @@
 
 void run_benchmark_case(const std::string& case_name, sage::TargetPlacement placement) {
     std::cout << "===================================================\n";
-    std::cout << "SAGE v1 Benchmark Case: " << case_name << "\n";
+    std::cout << "SAGE v2 Benchmark Case: " << case_name << "\n";
     std::cout << "===================================================\n";
     
     // Configuration
@@ -215,7 +215,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
 }
 
 int main() {
-    std::cout << "SAGE v1 - Hardware-Aware Parallel Search Framework\n";
+    std::cout << "SAGE v2 - Adaptive Metadata-Assisted Search Framework\n";
     std::cout << "===================================================\n\n";
     
     // Delete old CSV file to ensure fresh start
