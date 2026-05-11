@@ -1,86 +1,107 @@
-# SAGE
-## Smart Adaptive Generic Search Engine
-### Hardware-Aware Parallel Search Framework for Massive Unsorted Datasets
+# SAGE — Smart Adaptive Generic Search Engine
+## Hardware-Aware Adaptive Search Framework for Massive Unsorted Datasets
 
-## Project Overview
+## Short Overview
 
-SAGE v1 is a C++20 hardware-aware parallel search framework designed for massive unsorted in-memory integer datasets. It does not claim to beat linear search theoretically, but improves real execution time using parallel search, early stopping, and safe worker allocation.
+SAGE is a C++20 performance-engineering project focused on practical search over massive unsorted datasets. It starts from simple baseline search, then evolves into hardware-aware parallel search and adaptive metadata-assisted pruning.
+
+- **v1** implemented hardware-aware parallel search
+- **v2** adds metadata-assisted adaptive search
 
 ## Why SAGE?
 
-The problem SAGE addresses:
-- Sorted data can use binary search with O(log n) complexity
-- Unsorted data usually requires linear search with O(n) complexity  
-- For massive datasets, linear search becomes slow in practice
-- Blindly using all CPU cores can overload the system
-- SAGE v1 tries to improve practical search time while keeping resource usage controlled
+Searching massive unsorted datasets is expensive when:
+- data is not sorted
+- no index exists  
+- building an index is not worth the cost
+- the dataset is temporary
+- memory overhead matters
+- occasional searches are required
 
-## SAGE v1 Features
+SAGE improves practical search performance using:
+- CPU-aware worker selection
+- chunk-based parallel search
+- early termination
+- block metadata
+- metadata-pruned search
+- benchmark-based validation
 
-- **Synthetic massive dataset generation**
-- **Target placement control**: MIDDLE, BEGINNING, ABSENT
-- **Manual linear search baseline**
-- **std::find baseline**
-- **Parallel chunk-based search**
-- **Early termination using atomic flag**
-- **Logical CPU core detection**
-- **Safe worker recommendation**
-- **Benchmark timing using std::chrono**
-- **Correctness validation**
+## Version Status
 
-## Current Scope of v1
+### SAGE v1.0.0 — Completed
+Features:
+- C++20 implementation
+- Synthetic massive dataset generation
+- Target placement control
+- Manual linear search baseline
+- std::find baseline
+- Chunk-based parallel search
+- Hardware-aware logical core detection
+- Worker recommendation
+- Atomic early termination
+- Correctness validation
+- Benchmarking on up to 50 million int64_t elements
 
-- Only standard C++20
-- Only `std::vector<std::int64_t>`
-- Only in-memory search
-- No SIMD, mmap, GPU, Bloom filters, CSV, dashboard, indexing, or database support yet
+### SAGE v2.0.0 — Current
+Features:
+- Resource-aware worker policy
+- Chunk manager
+- Block-level metadata generation
+- Metadata-pruned parallel search
+- Simple strategy selector
+- Realistic absent-case validation
+- CSV benchmark export
+- Final raw benchmark output
 
-## Architecture
+## How v2 Works
 
 ```
-User Query / Target Key
-        ↓
-Synthetic Dataset Generator
-        ↓
-Hardware Detector
-        ↓
-Safe Worker Allocator
-        ↓
-Search Methods
-   ├── Manual Linear Search
-   ├── std::find Baseline
-   └── Parallel Early-Stopping Search
-        ↓
-Benchmark + Correctness Report
+Dataset -> Chunks -> Block Metadata -> Strategy Selector -> Metadata-Pruned Parallel Search -> Result + Metrics
 ```
+
+**Metadata Structure:**
+Each block stores:
+- block id
+- start index
+- end index
+- min value
+- max value
+- count
+
+**Pruning Logic:**
+If target is outside a block's min/max range, that block can be skipped safely.
+
+**Limitation:**
+If the target is within the min/max range of every block, metadata cannot prune and overhead may make metadata-pruned search slightly slower than normal parallel search.
 
 ## Benchmark Results
 
-Test Setup:
-- Dataset size: 50,000,000 int64_t elements
-- Target value: 9999999937
-- Logical cores detected: 12
-- Recommended workers: 8
+| Case | Linear Search | std::find | Parallel Search | Metadata-Pruned Search | Blocks Searched | Blocks Skipped | Parallel Speedup | Metadata Speedup |
+|------|--------------:|----------:|----------------:|-----------------------:|----------------:|---------------:|-----------------:|-----------------:|
+| MIDDLE | 144.125 ms | 118.288 ms | 2.508 ms | 6.786 ms | 1 | 6 | 57.48x | 21.24x |
+| BEGINNING | 0.001 ms | 0.000 ms | 1.888 ms | 1.732 ms | 1 | 6 | 0.00x | 0.00x |
+| ABSENT | 296.608 ms | 239.979 ms | 94.861 ms | 0.003 ms | 0 | 7 | 3.13x | 102278.79x |
+| ABSENT_IN_RANGE | 300.052 ms | 241.534 ms | 105.887 ms | 105.713 ms | 7 | 0 | 2.83x | 2.84x |
 
-| Target Placement | Linear Search | std::find | Parallel Search | Speedup vs Linear | Correct |
-|---|---:|---:|---:|---:|---|
-| MIDDLE | 158.608 ms | 127.713 ms | 2.200 ms | 72.09x | YES |
-| BEGINNING | 0.001 ms | 0.000 ms | 1.321 ms | 0.00x | YES |
-| ABSENT | 313.624 ms | 252.442 ms | 104.087 ms | 3.01x | YES |
+**Dataset:** 50,000,000 int64_t elements  
+**Hardware:** 12 logical cores detected  
+**Resource mode:** BALANCED  
+**Recommended v2 workers:** 7
 
-## Benchmark Observations
+## Benchmark Interpretation
 
-- **MIDDLE case** shows strong speedup because the dataset is split across workers and early stopping reduces unnecessary work.
-- **ABSENT case** is important because all methods must scan the full dataset; SAGE still achieved 3.01x speedup.
-- **BEGINNING case** is faster with linear search because the target is found immediately at index 0, while parallel search has thread creation overhead.
-- This shows SAGE v1 is not meant to replace linear search in every case. It is useful for massive datasets where the search is not trivially resolved immediately.
+- **MIDDLE case** shows strong benefit from parallel search and metadata pruning because only 1 out of 7 blocks needed to be searched.
+- **BEGINNING case** shows that linear search can still win when the target is at the first index because parallelism has overhead.
+- **ABSENT case** is an out-of-range absent target, where metadata skips all blocks and search completes almost instantly.
+- **ABSENT_IN_RANGE** is the realistic hard absent case. Since the target is within the possible value range, metadata cannot skip any block. This proves the system is honest and validates the trade-off.
 
-## Build Instructions
+**Important:** The huge ABSENT metadata speedup should not be treated as universal. It applies to out-of-range pruning cases.
+
+## Build and Run
 
 ```powershell
 $env:Path = "C:\msys64\ucrt64\bin;" + $env:Path
 cd D:\SAGE
-cmake -S . -B build -G "Ninja"
 cmake --build build
 .\build\sage.exe
 ```
@@ -104,52 +125,36 @@ SAGE/
 │ │ ├── dataset_generator.hpp
 │ │ ├── search.hpp
 │ │ ├── hardware.hpp
-│ │ └── benchmark.hpp
+│ │ ├── benchmark.hpp
+│ │ ├── resource_policy.hpp
+│ │ ├── chunk_manager.hpp
+│ │ ├── metadata.hpp
+│ │ ├── strategy.hpp
+│ │ └── csv_export.hpp
 │ └── src/
 │ ├── dataset_generator.cpp
 │ ├── search.cpp
 │ ├── hardware.cpp
-│ └── benchmark.cpp
+│ ├── benchmark.cpp
+│ ├── resource_policy.cpp
+│ ├── chunk_manager.cpp
+│ ├── metadata.cpp
+│ ├── strategy.cpp
+│ └── csv_export.cpp
 └── benchmarks/
 └── results/
-└── benchmark_50M_v1.txt
+├── v2_results.csv
+└── benchmark_50M_v2.txt
 ```
-
-## Roadmap
-
-### SAGE v1
-- Hardware-aware parallel search core
-- Linear/std::find/parallel benchmarks
-- Early stopping
-- Synthetic dataset generation
-
-### SAGE v2
-- Memory-safe chunking
-- CSV / binary file support
-- Block metadata
-- Min-max pruning
-- Benchmark dashboard
-
-### SAGE v3
-- SIMD acceleration
-- Memory-mapped search
-- Work-stealing thread pool
-- Bloom filters
-- Profiling and flamegraphs
-
-### SAGE v4
-- Optional GPU offloading
-- Approximate search
-- Online strategy tuning
-- Distributed search simulation
 
 ## Limitations
 
-- v1 works only with in-memory integer vectors
+- Works only with in-memory integer vectors
 - Parallel search has overhead and may be slower when the target is at the beginning
 - Results depend on hardware, CPU load, compiler, and dataset distribution
-- v1 does not replace indexing or hashing for repeated exact lookups
+- Does not replace indexing or hashing for repeated exact lookups
+- Metadata pruning effectiveness depends on data distribution
 
 ## Final Note
 
-SAGE v1 is the foundation. The goal is to evolve it version by version into a high-performance adaptive search framework for massive unsorted datasets.
+SAGE is useful when sorting or building a full index may be expensive, unavailable, memory-heavy, temporary, or unnecessary for one-time or occasional searches. It provides a practical performance improvement for massive unsorted dataset search without claiming to replace all search algorithms or indexing systems.
