@@ -7,6 +7,7 @@
 #include "metadata.hpp"
 #include "strategy.hpp"
 #include "csv_export.hpp"
+#include "thread_pool.hpp"
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -217,6 +218,16 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
 int main() {
     std::cout << "SAGE v2 - Adaptive Metadata-Assisted Search Framework\n";
     std::cout << "===================================================\n\n";
+    
+    // SAGE v3 Diagnostic
+    {
+        constexpr std::size_t dataset_size = 50'000'000;
+        std::size_t pool_workers = sage::recommended_worker_count(dataset_size, sage::ResourceMode::BALANCED);
+        sage::ThreadPool pool(pool_workers);
+        std::cout << "SAGE v3 Diagnostic:\n";
+        std::cout << "  Thread pool workers: " << pool.size() << "\n";
+        std::cout << "  Thread pool status: initialized\n\n";
+    }
     
     // Delete old CSV file to ensure fresh start
     const std::string csv_path = "benchmarks/results/v2_results.csv";

@@ -20,6 +20,7 @@ set(SOURCES
     engine/src/metadata.cpp
     engine/src/strategy.cpp
     engine/src/csv_export.cpp
+    engine/src/thread_pool.cpp
 )
 
 add_executable(sage ${SOURCES})
