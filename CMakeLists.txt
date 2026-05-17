@@ -7,6 +7,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options(-Wall -Wextra)
 
+option(SAGE_ENABLE_AVX2 "Enable AVX2 SIMD acceleration for search" ON)
+
+if(SAGE_ENABLE_AVX2)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(-mavx2)
+    endif()
+endif()
+
 include_directories(engine/include)
 
 set(SOURCES
