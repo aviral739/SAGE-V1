@@ -110,6 +110,19 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
         }
     );
     
+    // Dynamic Parallel Search (v3)
+    constexpr std::size_t block_multiplier = 4;
+    std::size_t block_count = recommended_workers * block_multiplier;
+    auto dynamic_result = sage::benchmark_search(
+        "Dynamic Parallel Search",
+        dataset.data,
+        dataset.target,
+        dataset.expected_index,
+        [recommended_workers, block_count](const std::vector<std::int64_t>& data, std::int64_t target) {
+            return sage::dynamic_parallel_search(data, target, recommended_workers, block_count);
+        }
+    );
+    
     // Metadata-pruned parallel search
     auto start_time = std::chrono::high_resolution_clock::now();
     auto metadata_result = sage::metadata_pruned_parallel_search(
@@ -160,6 +173,17 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     std::cout << "  Time: " << parallel_result.elapsed_ms << " ms\n";
     std::cout << "  Correct: " << (parallel_result.correct ? "YES" : "NO") << "\n\n";
     
+    std::cout << dynamic_result.method_name << ":\n";
+    std::cout << "  Result index: ";
+    if (dynamic_result.result_index) {
+        std::cout << *dynamic_result.result_index;
+    } else {
+        std::cout << "not found";
+    }
+    std::cout << "\n";
+    std::cout << "  Time: " << dynamic_result.elapsed_ms << " ms\n";
+    std::cout << "  Correct: " << (dynamic_result.correct ? "YES" : "NO") << "\n\n";
+    
     // Metadata-Pruned Parallel Search
     std::cout << "Metadata-Pruned Parallel Search:\n";
     std::cout << "  Result index: ";
@@ -180,7 +204,9 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     std::cout << std::setprecision(2);
     double parallel_speedup = linear_result.elapsed_ms / parallel_result.elapsed_ms;
     double metadata_speedup = linear_result.elapsed_ms / metadata_elapsed_ms;
+    double dynamic_speedup = linear_result.elapsed_ms / dynamic_result.elapsed_ms;
     std::cout << "Parallel search speedup: " << parallel_speedup << "x\n";
+    std::cout << "Dynamic parallel speedup: " << dynamic_speedup << "x\n";
     std::cout << "Metadata-pruned search speedup: " << metadata_speedup << "x\n\n";
     
     // Export to CSV

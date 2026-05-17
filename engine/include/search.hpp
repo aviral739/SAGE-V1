@@ -23,6 +23,13 @@ std::optional<std::size_t> parallel_search(
     std::size_t worker_count
 );
 
+std::optional<std::size_t> dynamic_parallel_search(
+    const std::vector<std::int64_t>& data,
+    std::int64_t target,
+    std::size_t worker_count,
+    std::size_t block_count
+);
+
 struct MetadataSearchResult {
     std::optional<std::size_t> result_index;
     std::size_t total_blocks;

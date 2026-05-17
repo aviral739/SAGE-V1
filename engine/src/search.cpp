@@ -1,8 +1,11 @@
 #include "search.hpp"
+#include "thread_pool.hpp"
+#include "chunk_manager.hpp"
 #include <algorithm>
 #include <thread>
 #include <atomic>
 #include <vector>
+#include <mutex>
 
 namespace sage {
 
@@ -281,6 +284,56 @@ MetadataSearchResult metadata_pruned_parallel_search(
     }
     
     return result;
+}
+
+std::optional<std::size_t> dynamic_parallel_search(
+    const std::vector<std::int64_t>& data,
+    std::int64_t target,
+    std::size_t worker_count,
+    std::size_t block_count
+) {
+    if (data.empty()) {
+        return std::nullopt;
+    }
+
+    if (worker_count == 0) {
+        worker_count = 1;
+    }
+
+    if (block_count == 0) {
+        block_count = worker_count;
+    }
+
+    block_count = std::min(block_count, data.size());
+
+    auto chunks = sage::create_chunks(data.size(), block_count);
+    sage::ThreadPool pool(worker_count);
+
+    std::atomic<bool> found(false);
+    std::mutex result_mutex;
+    std::optional<std::size_t> result_index;
+
+    for (const auto& chunk : chunks) {
+        pool.submit([&data, target, chunk, &found, &result_mutex, &result_index]() {
+            for (std::size_t i = chunk.start; i < chunk.end && !found.load(); ++i) {
+                if (data[i] == target) {
+                    std::lock_guard<std::mutex> lock(result_mutex);
+                    if (!found.load()) {
+                        found.store(true);
+                        result_index = i;
+                    }
+                    return;
+                }
+            }
+        });
+    }
+
+    pool.wait();
+
+    {
+        std::lock_guard<std::mutex> lock(result_mutex);
+        return result_index;
+    }
 }
 
 } // namespace sage
