@@ -18,3 +18,5 @@ out/
 
 # Benchmarks results (optional, usually kept but maybe you want it clean)
 # benchmarks/results/*.txt
+
+build-release/
