@@ -130,6 +130,20 @@ void run_benchmark_case(
     double metadata_skip_percentage = (metadata_result.total_blocks > 0) ? 
         (static_cast<double>(metadata_result.blocks_skipped) / metadata_result.total_blocks * 100.0) : 0.0;
     
+    // Metadata-pruned SIMD search
+    auto metadata_simd_start = std::chrono::high_resolution_clock::now();
+    auto metadata_simd_result = sage::metadata_pruned_simd_search(
+        dataset.data,
+        dataset.target,
+        metadata,
+        adaptive_workers
+    );
+    auto metadata_simd_end = std::chrono::high_resolution_clock::now();
+    double metadata_simd_elapsed_ms = std::chrono::duration<double, std::milli>(metadata_simd_end - metadata_simd_start).count();
+    bool metadata_simd_correct = (metadata_simd_result.result_index == dataset.expected_index);
+    double metadata_simd_skip_percentage = (metadata_simd_result.total_blocks > 0) ? 
+        (static_cast<double>(metadata_simd_result.blocks_skipped) / metadata_simd_result.total_blocks * 100.0) : 0.0;
+    
     // Display results
     std::cout << std::fixed << std::setprecision(3);
     
@@ -179,6 +193,29 @@ void run_benchmark_case(
     std::cout << "  Time: " << dynamic_result.elapsed_ms << " ms\n";
     std::cout << "  Correct: " << (dynamic_result.correct ? "YES" : "NO") << "\n\n";
     
+    std::cout << "SIMD Methods:\n";
+    // SIMD Search
+    auto simd_result = sage::benchmark_search(
+        "SIMD Search",
+        dataset.data,
+        dataset.target,
+        dataset.expected_index,
+        [](const std::vector<std::int64_t>& data, std::int64_t target) {
+            return sage::simd_search(data, target);
+        }
+    );
+
+    std::cout << simd_result.method_name << ":\n";
+    std::cout << "  Result index: ";
+    if (simd_result.result_index) {
+        std::cout << *simd_result.result_index;
+    } else {
+        std::cout << "not found";
+    }
+    std::cout << "\n";
+    std::cout << "  Time: " << simd_result.elapsed_ms << " ms\n";
+    std::cout << "  Correct: " << (simd_result.correct ? "YES" : "NO") << "\n\n";
+
     std::cout << "Adaptive Methods:\n";
     // Metadata-Pruned Parallel Search
     std::cout << "Metadata-Pruned Parallel Search:\n";
@@ -196,22 +233,45 @@ void run_benchmark_case(
     std::cout << "  Blocks skipped: " << metadata_result.blocks_skipped << "\n";
     std::cout << "  Skip percentage: " << std::setprecision(1) << metadata_skip_percentage << "%\n\n";
     
+    std::cout << "Metadata-Pruned SIMD Search:\n";
+    std::cout << "  Result index: ";
+    if (metadata_simd_result.result_index) {
+        std::cout << *metadata_simd_result.result_index;
+    } else {
+        std::cout << "not found";
+    }
+    std::cout << "\n";
+    std::cout << "  Time: " << metadata_simd_elapsed_ms << " ms\n";
+    std::cout << "  Correct: " << (metadata_simd_correct ? "YES" : "NO") << "\n";
+    std::cout << "  Total blocks: " << metadata_simd_result.total_blocks << "\n";
+    std::cout << "  Blocks searched: " << metadata_simd_result.blocks_searched << "\n";
+    std::cout << "  Blocks skipped: " << metadata_simd_result.blocks_skipped << "\n";
+    std::cout << "  Skip percentage: " << std::setprecision(1) << metadata_simd_skip_percentage << "%\n\n";
+    
     // Speedup calculations
     std::cout << std::setprecision(2);
     double parallel_speedup = 0.0;
     double dynamic_speedup = 0.0;
     double metadata_speedup = 0.0;
+    double simd_speedup = 0.0;
+    double metadata_simd_speedup = 0.0;
     if (linear_result.elapsed_ms < 0.01) {
         std::cout << "Fixed chunk parallel speedup: N/A (baseline too small)\n";
         std::cout << "Dynamic work queue speedup: N/A (baseline too small)\n";
-        std::cout << "Metadata-pruned speedup: N/A (baseline too small)\n\n";
+        std::cout << "Metadata-pruned speedup: N/A (baseline too small)\n";
+        std::cout << "SIMD speedup: N/A (baseline too small)\n";
+        std::cout << "Metadata-pruned SIMD speedup: N/A (baseline too small)\n\n";
     } else {
         parallel_speedup = linear_result.elapsed_ms / parallel_result.elapsed_ms;
         dynamic_speedup = linear_result.elapsed_ms / dynamic_result.elapsed_ms;
         metadata_speedup = linear_result.elapsed_ms / metadata_elapsed_ms;
+        simd_speedup = linear_result.elapsed_ms / simd_result.elapsed_ms;
+        metadata_simd_speedup = linear_result.elapsed_ms / metadata_simd_elapsed_ms;
         std::cout << "Fixed chunk parallel speedup: " << parallel_speedup << "x\n";
         std::cout << "Dynamic work queue speedup: " << dynamic_speedup << "x\n";
-        std::cout << "Metadata-pruned speedup: " << metadata_speedup << "x\n\n";
+        std::cout << "Metadata-pruned speedup: " << metadata_speedup << "x\n";
+        std::cout << "SIMD speedup: " << simd_speedup << "x\n";
+        std::cout << "Metadata-pruned SIMD speedup: " << metadata_simd_speedup << "x\n\n";
     }
     
     // Export to CSV
@@ -261,7 +321,8 @@ int main() {
     std::cout << "  Logical cores: " << logical_cores << "\n";
     std::cout << "  Recommended workers: " << recommended_workers << "\n";
     std::cout << "  Adaptive workers: " << adaptive_workers << "\n";
-    std::cout << "  Thread pool workers: " << adaptive_workers << "\n\n";
+    std::cout << "  Thread pool workers: " << adaptive_workers << "\n";
+    std::cout << "  SIMD mode: " << sage::simd_mode() << "\n\n";
     
     // Delete old CSV file to ensure fresh start
     const std::string csv_path = "benchmarks/results/v3_results.csv";

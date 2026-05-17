@@ -44,4 +44,25 @@ MetadataSearchResult metadata_pruned_parallel_search(
     std::size_t worker_count
 );
 
+struct MetadataSimdSearchResult {
+    std::optional<std::size_t> result_index;
+    std::size_t total_blocks;
+    std::size_t blocks_searched;
+    std::size_t blocks_skipped;
+};
+
+MetadataSimdSearchResult metadata_pruned_simd_search(
+    const std::vector<std::int64_t>& data,
+    std::int64_t target,
+    const std::vector<BlockMetadata>& metadata,
+    std::size_t worker_count
+);
+
+std::optional<std::size_t> simd_search(
+    const std::vector<std::int64_t>& data,
+    std::int64_t target
+);
+
+const char* simd_mode();
+
 } // namespace sage

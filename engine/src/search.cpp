@@ -336,4 +336,184 @@ std::optional<std::size_t> dynamic_parallel_search(
     }
 }
 
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
+
+namespace {
+    std::optional<std::size_t> simd_search_range(
+        const std::vector<std::int64_t>& data,
+        std::int64_t target,
+        std::size_t start,
+        std::size_t end
+    ) {
+        if (start >= end || start >= data.size()) {
+            return std::nullopt;
+        }
+        if (end > data.size()) {
+            end = data.size();
+        }
+
+#if defined(__AVX2__)
+        const __m256i target_vec = _mm256_set1_epi64x(target);
+        std::size_t i = start;
+
+        for (; i + 16 <= end; i += 16) {
+            __m256i v0 = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i*>(&data[i]));
+            __m256i v1 = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i*>(&data[i + 4]));
+            __m256i v2 = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i*>(&data[i + 8]));
+            __m256i v3 = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i*>(&data[i + 12]));
+
+            __m256i cmp0 = _mm256_cmpeq_epi64(v0, target_vec);
+            __m256i cmp1 = _mm256_cmpeq_epi64(v1, target_vec);
+            __m256i cmp2 = _mm256_cmpeq_epi64(v2, target_vec);
+            __m256i cmp3 = _mm256_cmpeq_epi64(v3, target_vec);
+
+            int mask0 = _mm256_movemask_pd(_mm256_castsi256_pd(cmp0));
+            int mask1 = _mm256_movemask_pd(_mm256_castsi256_pd(cmp1));
+            int mask2 = _mm256_movemask_pd(_mm256_castsi256_pd(cmp2));
+            int mask3 = _mm256_movemask_pd(_mm256_castsi256_pd(cmp3));
+
+            if (mask0 | mask1 | mask2 | mask3) {
+                if (mask0) {
+                    if (mask0 & 1) return i;
+                    if (mask0 & 2) return i + 1;
+                    if (mask0 & 4) return i + 2;
+                    return i + 3;
+                }
+                if (mask1) {
+                    if (mask1 & 1) return i + 4;
+                    if (mask1 & 2) return i + 5;
+                    if (mask1 & 4) return i + 6;
+                    return i + 7;
+                }
+                if (mask2) {
+                    if (mask2 & 1) return i + 8;
+                    if (mask2 & 2) return i + 9;
+                    if (mask2 & 4) return i + 10;
+                    return i + 11;
+                }
+                if (mask3 & 1) return i + 12;
+                if (mask3 & 2) return i + 13;
+                if (mask3 & 4) return i + 14;
+                return i + 15;
+            }
+        }
+
+        for (; i + 4 <= end; i += 4) {
+            __m256i chunk = _mm256_loadu_si256(
+                reinterpret_cast<const __m256i*>(&data[i]));
+            __m256i cmp = _mm256_cmpeq_epi64(chunk, target_vec);
+            int mask = _mm256_movemask_pd(_mm256_castsi256_pd(cmp));
+
+            if (mask) {
+                if (mask & 1) return i;
+                if (mask & 2) return i + 1;
+                if (mask & 4) return i + 2;
+                return i + 3;
+            }
+        }
+
+        for (; i < end; ++i) {
+            if (data[i] == target) {
+                return i;
+            }
+        }
+#else
+        for (std::size_t i = start; i < end; ++i) {
+            if (data[i] == target) {
+                return i;
+            }
+        }
+#endif
+
+        return std::nullopt;
+    }
+}
+
+const char* simd_mode() {
+#if defined(__AVX2__)
+    return "AVX2";
+#else
+    return "SCALAR_FALLBACK";
+#endif
+}
+
+std::optional<std::size_t> simd_search(
+    const std::vector<std::int64_t>& data,
+    std::int64_t target
+) {
+    if (data.empty()) {
+        return std::nullopt;
+    }
+    return simd_search_range(data, target, 0, data.size());
+}
+
+MetadataSimdSearchResult metadata_pruned_simd_search(
+    const std::vector<std::int64_t>& data,
+    std::int64_t target,
+    const std::vector<BlockMetadata>& metadata,
+    std::size_t worker_count
+) {
+    MetadataSimdSearchResult result;
+    result.result_index = std::nullopt;
+    result.total_blocks = metadata.size();
+    result.blocks_searched = 0;
+    result.blocks_skipped = 0;
+
+    if (data.empty() || metadata.empty()) {
+        return result;
+    }
+
+    if (worker_count == 0) {
+        worker_count = 1;
+    }
+
+    std::vector<BlockMetadata> eligible_blocks;
+    eligible_blocks.reserve(metadata.size());
+
+    for (const auto& block : metadata) {
+        if (sage::can_contain_target(block, target)) {
+            eligible_blocks.push_back(block);
+        }
+    }
+
+    result.blocks_skipped = result.total_blocks - eligible_blocks.size();
+    result.blocks_searched = eligible_blocks.size();
+
+    if (eligible_blocks.empty()) {
+        return result;
+    }
+
+    sage::ThreadPool pool(worker_count);
+    std::atomic<bool> found(false);
+    std::mutex result_mutex;
+    std::optional<std::size_t> result_index;
+
+    for (const auto& block : eligible_blocks) {
+        pool.submit([&data, target, block, &found, &result_mutex, &result_index]() {
+            if (found.load()) {
+                return;
+            }
+            auto idx = simd_search_range(data, target, block.start, block.end);
+            if (idx.has_value()) {
+                std::lock_guard<std::mutex> lock(result_mutex);
+                if (!found.load()) {
+                    found.store(true);
+                    result_index = idx;
+                }
+            }
+        });
+    }
+
+    pool.wait();
+
+    result.result_index = result_index;
+    return result;
+}
+
 } // namespace sage
