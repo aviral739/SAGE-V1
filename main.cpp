@@ -13,9 +13,16 @@
 #include <chrono>
 #include <filesystem>
 
-void run_benchmark_case(const std::string& case_name, sage::TargetPlacement placement) {
+void run_benchmark_case(
+    const std::string& case_name,
+    sage::TargetPlacement placement,
+    std::size_t logical_cores,
+    std::size_t recommended_workers,
+    std::size_t adaptive_workers,
+    sage::ResourceMode mode
+) {
     std::cout << "===================================================\n";
-    std::cout << "SAGE v2 Benchmark Case: " << case_name << "\n";
+    std::cout << "SAGE v3 Benchmark Case: " << case_name << "\n";
     std::cout << "===================================================\n";
     
     // Configuration
@@ -25,28 +32,17 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     std::cout << "Generating dataset...\n";
     auto dataset = sage::generate_dataset(dataset_size, placement);
     
-    // SAGE v2 Diagnostic
-    sage::ResourceMode mode = sage::ResourceMode::BALANCED;
-    std::size_t v2_workers = sage::recommended_worker_count(dataset_size, mode);
-    auto chunks = sage::create_chunks(dataset_size, v2_workers);
-    bool chunks_valid = sage::validate_chunks(chunks, dataset_size);
+    // Build metadata and strategy
+    auto chunks = sage::create_chunks(dataset_size, adaptive_workers);
     auto metadata = sage::generate_metadata(dataset.data, chunks);
     auto metadata_summary = sage::summarize_metadata(metadata);
     auto strategy = sage::choose_strategy(dataset_size, true, mode);
     
-    std::cout << "SAGE v2 Diagnostic:\n";
-    std::cout << "  Resource mode: " << sage::to_string(mode) << "\n";
-    std::cout << "  V2 recommended workers: " << v2_workers << "\n";
-    std::cout << "  Chunks created: " << chunks.size() << "\n";
-    std::cout << "  Chunks valid: " << (chunks_valid ? "YES" : "NO") << "\n";
-    std::cout << "  Metadata blocks: " << metadata_summary.total_blocks << "\n";
-    std::cout << "  Metadata total elements: " << metadata_summary.total_elements << "\n";
-    std::cout << "  Selected strategy: " << sage::to_string(strategy.strategy) << "\n";
-    std::cout << "  Strategy reason: " << strategy.reason << "\n\n";
-    
-    // Hardware detection
-    const std::size_t logical_cores = sage::logical_core_count();
-    const std::size_t recommended_workers = sage::recommended_worker_count(dataset_size);
+    std::cout << "Case Configuration:\n";
+    std::cout << "  Workers: " << recommended_workers << "\n";
+    std::cout << "  Adaptive workers: " << adaptive_workers << "\n";
+    std::cout << "  Blocks: " << metadata_summary.total_blocks << "\n";
+    std::cout << "  Strategy: " << sage::to_string(strategy.strategy) << "\n\n";
     
     // Display dataset information
     std::cout << "Dataset size: " << dataset.data.size() << " elements\n";
@@ -68,14 +64,11 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     } else {
         std::cout << "none (target absent)";
     }
-    std::cout << "\n";
-    
-    std::cout << "Logical cores: " << logical_cores << "\n";
-    std::cout << "Recommended workers: " << recommended_workers << "\n\n";
+    std::cout << "\n\n";
     
     // Benchmark results
     std::cout << "Benchmark Results:\n";
-    std::cout << "-----------------\n";
+    std::cout << "-----------------\n\n";
     
     // Linear search
     auto linear_result = sage::benchmark_search(
@@ -101,7 +94,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     
     // Parallel search
     auto parallel_result = sage::benchmark_search(
-        "Parallel Search",
+        "Fixed Chunk Parallel Search",
         dataset.data,
         dataset.target,
         dataset.expected_index,
@@ -114,7 +107,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     constexpr std::size_t block_multiplier = 4;
     std::size_t block_count = recommended_workers * block_multiplier;
     auto dynamic_result = sage::benchmark_search(
-        "Dynamic Parallel Search",
+        "Dynamic Work Queue Search",
         dataset.data,
         dataset.target,
         dataset.expected_index,
@@ -129,7 +122,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
         dataset.data,
         dataset.target,
         metadata,
-        v2_workers
+        adaptive_workers
     );
     auto end_time = std::chrono::high_resolution_clock::now();
     double metadata_elapsed_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
@@ -140,6 +133,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     // Display results
     std::cout << std::fixed << std::setprecision(3);
     
+    std::cout << "Baseline Methods:\n";
     std::cout << linear_result.method_name << ":\n";
     std::cout << "  Result index: ";
     if (linear_result.result_index) {
@@ -162,6 +156,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     std::cout << "  Time: " << std_find_result.elapsed_ms << " ms\n";
     std::cout << "  Correct: " << (std_find_result.correct ? "YES" : "NO") << "\n\n";
     
+    std::cout << "Parallel Methods:\n";
     std::cout << parallel_result.method_name << ":\n";
     std::cout << "  Result index: ";
     if (parallel_result.result_index) {
@@ -184,6 +179,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     std::cout << "  Time: " << dynamic_result.elapsed_ms << " ms\n";
     std::cout << "  Correct: " << (dynamic_result.correct ? "YES" : "NO") << "\n\n";
     
+    std::cout << "Adaptive Methods:\n";
     // Metadata-Pruned Parallel Search
     std::cout << "Metadata-Pruned Parallel Search:\n";
     std::cout << "  Result index: ";
@@ -202,12 +198,21 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     
     // Speedup calculations
     std::cout << std::setprecision(2);
-    double parallel_speedup = linear_result.elapsed_ms / parallel_result.elapsed_ms;
-    double metadata_speedup = linear_result.elapsed_ms / metadata_elapsed_ms;
-    double dynamic_speedup = linear_result.elapsed_ms / dynamic_result.elapsed_ms;
-    std::cout << "Parallel search speedup: " << parallel_speedup << "x\n";
-    std::cout << "Dynamic parallel speedup: " << dynamic_speedup << "x\n";
-    std::cout << "Metadata-pruned search speedup: " << metadata_speedup << "x\n\n";
+    double parallel_speedup = 0.0;
+    double dynamic_speedup = 0.0;
+    double metadata_speedup = 0.0;
+    if (linear_result.elapsed_ms < 0.01) {
+        std::cout << "Fixed chunk parallel speedup: N/A (baseline too small)\n";
+        std::cout << "Dynamic work queue speedup: N/A (baseline too small)\n";
+        std::cout << "Metadata-pruned speedup: N/A (baseline too small)\n\n";
+    } else {
+        parallel_speedup = linear_result.elapsed_ms / parallel_result.elapsed_ms;
+        dynamic_speedup = linear_result.elapsed_ms / dynamic_result.elapsed_ms;
+        metadata_speedup = linear_result.elapsed_ms / metadata_elapsed_ms;
+        std::cout << "Fixed chunk parallel speedup: " << parallel_speedup << "x\n";
+        std::cout << "Dynamic work queue speedup: " << dynamic_speedup << "x\n";
+        std::cout << "Metadata-pruned speedup: " << metadata_speedup << "x\n\n";
+    }
     
     // Export to CSV
     sage::BenchmarkCsvRow csv_row;
@@ -218,7 +223,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     csv_row.resource_mode = sage::to_string(mode);
     csv_row.selected_strategy = sage::to_string(strategy.strategy);
     csv_row.logical_cores = logical_cores;
-    csv_row.workers = v2_workers;
+    csv_row.workers = adaptive_workers;
     csv_row.total_blocks = metadata_result.total_blocks;
     csv_row.blocks_searched = metadata_result.blocks_searched;
     csv_row.blocks_skipped = metadata_result.blocks_skipped;
@@ -234,7 +239,7 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
     csv_row.parallel_correct = parallel_result.correct;
     csv_row.metadata_pruned_correct = metadata_correct;
     
-    const std::string csv_path = "benchmarks/results/v2_results.csv";
+    const std::string csv_path = "benchmarks/results/v3_results.csv";
     sage::write_csv_header_if_needed(csv_path);
     sage::append_benchmark_row(csv_path, csv_row);
     
@@ -242,28 +247,31 @@ void run_benchmark_case(const std::string& case_name, sage::TargetPlacement plac
 }
 
 int main() {
-    std::cout << "SAGE v2 - Adaptive Metadata-Assisted Search Framework\n";
-    std::cout << "===================================================\n\n";
+    constexpr std::size_t dataset_size = 50'000'000;
+    const std::size_t logical_cores = sage::logical_core_count();
+    const std::size_t recommended_workers = sage::recommended_worker_count(dataset_size);
+    const sage::ResourceMode mode = sage::ResourceMode::BALANCED;
+    const std::size_t adaptive_workers = sage::recommended_worker_count(dataset_size, mode);
     
-    // SAGE v3 Diagnostic
-    {
-        constexpr std::size_t dataset_size = 50'000'000;
-        std::size_t pool_workers = sage::recommended_worker_count(dataset_size, sage::ResourceMode::BALANCED);
-        sage::ThreadPool pool(pool_workers);
-        std::cout << "SAGE v3 Diagnostic:\n";
-        std::cout << "  Thread pool workers: " << pool.size() << "\n";
-        std::cout << "  Thread pool status: initialized\n\n";
-    }
+    std::cout << "SAGE v3 - High-Performance Adaptive Search Framework\n";
+    std::cout << "=====================================================\n\n";
+    std::cout << "SAGE Runtime Configuration:\n";
+    std::cout << "  Version: v3-development\n";
+    std::cout << "  Resource mode: " << sage::to_string(mode) << "\n";
+    std::cout << "  Logical cores: " << logical_cores << "\n";
+    std::cout << "  Recommended workers: " << recommended_workers << "\n";
+    std::cout << "  Adaptive workers: " << adaptive_workers << "\n";
+    std::cout << "  Thread pool workers: " << adaptive_workers << "\n\n";
     
     // Delete old CSV file to ensure fresh start
-    const std::string csv_path = "benchmarks/results/v2_results.csv";
+    const std::string csv_path = "benchmarks/results/v3_results.csv";
     std::filesystem::remove(csv_path);
     
     // Run benchmark cases
-    run_benchmark_case("MIDDLE", sage::TargetPlacement::MIDDLE);
-    run_benchmark_case("BEGINNING", sage::TargetPlacement::BEGINNING);
-    run_benchmark_case("ABSENT", sage::TargetPlacement::ABSENT);
-    run_benchmark_case("ABSENT_IN_RANGE", sage::TargetPlacement::ABSENT_IN_RANGE);
+    run_benchmark_case("MIDDLE", sage::TargetPlacement::MIDDLE, logical_cores, recommended_workers, adaptive_workers, mode);
+    run_benchmark_case("BEGINNING", sage::TargetPlacement::BEGINNING, logical_cores, recommended_workers, adaptive_workers, mode);
+    run_benchmark_case("ABSENT", sage::TargetPlacement::ABSENT, logical_cores, recommended_workers, adaptive_workers, mode);
+    run_benchmark_case("ABSENT_IN_RANGE", sage::TargetPlacement::ABSENT_IN_RANGE, logical_cores, recommended_workers, adaptive_workers, mode);
     
     return 0;
 }
